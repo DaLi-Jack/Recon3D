@@ -57,3 +57,5 @@ segment-anything/
 shap-e/
 diffuser-inpainting/
 
+# test code
+testcode/

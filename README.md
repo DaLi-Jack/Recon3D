@@ -26,6 +26,9 @@ pip install -e .
 # install yaml, ipywidgets
 pip install pyyaml
 pip install ipywidgets
+
+# install pytorch3d (optional, speed up rendering)
+conda install pytorch3d -c pytorch3d
 ```
 
 4.install diffusers
