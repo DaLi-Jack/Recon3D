@@ -7,21 +7,15 @@ sys.path.append('./omni3d')                 # for 3d detection, omni3d is needed
 import numpy as np
 from collections import OrderedDict
 import torch
+import cv2
+import matplotlib.pyplot as plt
 
-from pytorch3d.io import IO
-import trimesh
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.engine import default_argument_parser, default_setup, launch
-from detectron2.data import transforms as T
-import copy
 
-# for vscode debug error
-import cv2, os
-dirname = os.path.dirname(cv2.__file__)
-plugin_path = os.path.join(dirname, 'plugins', 'platforms')
-os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
+import copy
 
 logger = logging.getLogger("detectron2")
 
@@ -30,139 +24,9 @@ sys.path.append(os.getcwd())
 np.set_printoptions(suppress=True)
 
 from cubercnn.config import get_cfg_defaults
-from cubercnn.modeling.proposal_generator import RPNWithIgnore
-from cubercnn.modeling.roi_heads import ROIHeads3D
-from cubercnn.modeling.meta_arch import RCNN3D, build_model
-from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
+from cubercnn.modeling.meta_arch import build_model
 from cubercnn import util, vis
-
-def do_test(args, cfg, model):
-
-    list_of_ims = util.list_files(os.path.join(args.input_folder, ''), '*')
-
-    model.eval()
-
-    thres = args.threshold
-
-    output_dir = cfg.OUTPUT_DIR
-    min_size = cfg.INPUT.MIN_SIZE_TEST
-    max_size = cfg.INPUT.MAX_SIZE_TEST
-    augmentations = T.AugmentationList([T.ResizeShortestEdge(min_size, max_size, "choice")])
-
-    util.mkdir_if_missing(output_dir)
-
-    category_path = os.path.join(util.file_parts(args.config_file)[0], 'category_meta.json')
-        
-    # store locally if needed
-    if category_path.startswith(util.CubeRCNNHandler.PREFIX):
-        category_path = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, category_path)
-
-    metadata = util.load_json(category_path)
-    cats = metadata['thing_classes']
-    
-    for path in list_of_ims:
-
-        im_name = util.file_parts(path)[1]
-        im = util.imread(path)
-
-        if im is None:
-            continue
-        
-        image_shape = im.shape[:2]  # h, w
-
-        h, w = image_shape
-        f_ndc = 4
-        f = f_ndc * h / 2
-
-        K = np.array([
-            [f, 0.0, w/2], 
-            [0.0, f, h/2], 
-            [0.0, 0.0, 1.0]
-        ])
-
-        aug_input = T.AugInput(im)
-        _ = augmentations(aug_input)
-        image = aug_input.image
-        img_draw_2d = copy.deepcopy(image)
-
-        batched = [{
-            'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))).cuda(), 
-            'height': image_shape[0], 'width': image_shape[1], 'K': K
-        }]
-
-        dets = model(batched)[0]['instances']
-        n_det = len(dets)
-
-        meshes = []
-        meshes_text = []
-
-        save_bbox3d = {}
-
-        if n_det > 0:
-            for idx, (corners3D, center_cam, center_2D, dimensions, pose, score, cat_idx, bbox_2d) in enumerate(zip(
-                    dets.pred_bbox3D, dets.pred_center_cam, dets.pred_center_2D, dets.pred_dimensions, 
-                    dets.pred_pose, dets.scores, dets.pred_classes, dets.pred_boxes
-                )):
-
-                # skip
-                if score < thres:
-                    continue
-                
-                cat = cats[cat_idx]
-
-                # # vis bbox 2d
-                # box_text = '{} {:.2f}'.format(cat, score)
-                # bbox_2d = bbox_2d.data.cpu().numpy()
-                # # vis.draw_2d_box(img_draw_2d, [bbox_2d[0], bbox_2d[1], bbox_2d[2]-bbox_2d[0], bbox_2d[3]-bbox_2d[1]])
-                # # vis.draw_2d_box(img_draw_2d, [bbox_2d[1], bbox_2d[0], bbox_2d[3]-bbox_2d[1], bbox_2d[2]-bbox_2d[0]])
-                # vis.draw_2d_box(img_draw_2d, [bbox_2d[0], bbox_2d[1], bbox_2d[2], bbox_2d[3]])
-                # vis.draw_text(img_draw_2d, '{}'.format(box_text), [bbox_2d[0], bbox_2d[1]], scale=0.50*img_draw_2d.shape[0]/500)
-
-                # vis bbox 3d
-                bbox3D = center_cam.tolist() + dimensions.tolist()
-                mesh_text = '{} {:.2f}'.format(cat, score)
-                meshes_text.append(mesh_text)
-                color = [c/255.0 for c in util.get_color(idx)]
-                box_mesh = util.mesh_cuboid(bbox3D, pose.tolist(), color=color)
-                meshes.append(box_mesh)
-
-                # save bbox3d
-                save_bbox3d[mesh_text] = {'bbox3D': bbox3D, 'pose': pose.tolist()}
-
-        
-        print('File: {} with {} dets'.format(im_name, len(meshes)))
-
-        if len(meshes) > 0:
-            im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
-            
-            if args.display:
-                im_concat = np.concatenate((im_drawn_rgb, im_topdown), axis=1)
-                vis.imshow(im_concat)
-
-            # util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
-
-            util.imwrite(im_drawn_rgb, os.path.join(output_dir, im_name+'_boxes.jpg'))
-            util.imwrite(im_topdown, os.path.join(output_dir, im_name+'_novel.jpg'))
-        else:
-            # util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
-
-            util.imwrite(im, os.path.join(output_dir, im_name+'_boxes.jpg'))
-
-        # save 3d bbox
-        util.save_json(os.path.join(output_dir, im_name+'_bbox3D.json'), save_bbox3d)
-
-        # save 3d bbox ply
-        for i, mesh in enumerate(meshes):
-            IO().save_mesh(mesh, os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i)))
-        
-        tri_meshes = []
-        for i in range(len(meshes)):
-            tri_meshes.append(trimesh.load(os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i))))
-            os.remove(os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i)))
-
-        # concatentate meshes
-        scene_mesh = trimesh.util.concatenate(tri_meshes)
-        scene_mesh.export(os.path.join(output_dir, im_name+'_scene_bbox3D.ply'))
+from utils import *
 
 
 def setup(args):
@@ -193,8 +57,9 @@ def main(args):
         cfg.MODEL.WEIGHTS, resume=True
     )
 
+    # for detection omni3d
     with torch.no_grad():
-        do_test(args, cfg, model)
+        detection(args, cfg, model)
 
 
 if __name__ == "__main__":
