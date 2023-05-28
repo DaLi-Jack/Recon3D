@@ -79,6 +79,7 @@ def detection(args, cfg, model):
 
         im_name = util.file_parts(path)[1]
         im = util.imread(path)
+        img_draw_2d = copy.deepcopy(im)
 
         if im is None:
             continue
@@ -98,7 +99,6 @@ def detection(args, cfg, model):
         aug_input = T.AugInput(im)
         _ = augmentations(aug_input)
         image = aug_input.image
-        img_draw_2d = copy.deepcopy(image)
 
         batched = [{
             'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))).cuda(), 
@@ -125,42 +125,43 @@ def detection(args, cfg, model):
                 
                 cat = cats[cat_idx]
 
-                # # vis bbox 2d
-                # box_text = '{} {:.2f}'.format(cat, score)
-                # bbox_2d = bbox_2d.data.cpu().numpy()
-                # # vis.draw_2d_box(img_draw_2d, [bbox_2d[0], bbox_2d[1], bbox_2d[2]-bbox_2d[0], bbox_2d[3]-bbox_2d[1]])
-                # # vis.draw_2d_box(img_draw_2d, [bbox_2d[1], bbox_2d[0], bbox_2d[3]-bbox_2d[1], bbox_2d[2]-bbox_2d[0]])
-                # vis.draw_2d_box(img_draw_2d, [bbox_2d[0], bbox_2d[1], bbox_2d[2], bbox_2d[3]])
-                # vis.draw_text(img_draw_2d, '{}'.format(box_text), [bbox_2d[0], bbox_2d[1]], scale=0.50*img_draw_2d.shape[0]/500)
+                mesh_text = '{} {:.2f}'.format(cat, score)
+                meshes_text.append(mesh_text)
+
+                # vis bbox 2d
+                bbox_2d = bbox_2d.data.cpu().numpy()
+                color = [c for c in util.get_color(idx)]
+                vis.draw_2d_box(img_draw_2d, [bbox_2d[0], bbox_2d[1], bbox_2d[2]-bbox_2d[0], bbox_2d[3]-bbox_2d[1]], color=color, thickness=max(2, int(np.round(3*img_draw_2d.shape[0]/1250))))
+                vis.draw_text(img_draw_2d, '{}'.format(mesh_text), [bbox_2d[0], bbox_2d[1]], scale=0.50*img_draw_2d.shape[0]/500, bg_color=color)
 
                 # vis bbox 3d
                 bbox3D = center_cam.tolist() + dimensions.tolist()
-                mesh_text = '{} {:.2f}'.format(cat, score)
-                meshes_text.append(mesh_text)
-                color = [c/255.0 for c in util.get_color(idx)]
+                color = [c/255.0 for c in util.get_color(idx)]          # normalize to [0, 1]
                 box_mesh = util.mesh_cuboid(bbox3D, pose.tolist(), color=color)
                 meshes.append(box_mesh)
 
                 # save bbox3d
-                save_bbox3d[mesh_text] = {'bbox3D': bbox3D, 'pose': pose.tolist()}
+                save_bbox3d[mesh_text] = {'bbox2D':bbox_2d.tolist(), 'bbox3D': bbox3D, 'pose': pose.tolist()}
 
         
         print('File: {} with {} dets'.format(im_name, len(meshes)))
 
         if len(meshes) > 0:
+            # vis bbox_3d
             im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
             
             if args.display:
                 im_concat = np.concatenate((im_drawn_rgb, im_topdown), axis=1)
                 vis.imshow(im_concat)
 
-            # util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
-
             util.imwrite(im_drawn_rgb, os.path.join(output_dir, im_name+'_boxes.jpg'))
             util.imwrite(im_topdown, os.path.join(output_dir, im_name+'_novel.jpg'))
-        else:
-            # util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
 
+            # vis bbox_2d
+            util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
+
+        else:
+            util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
             util.imwrite(im, os.path.join(output_dir, im_name+'_boxes.jpg'))
 
         # save 3d bbox

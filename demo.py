@@ -61,6 +61,13 @@ def main(args):
     with torch.no_grad():
         detection(args, cfg, model)
 
+    # fix seed
+    seed_torch(seed=0)
+
+    # for sam
+    
+
+
 
 if __name__ == "__main__":
     
