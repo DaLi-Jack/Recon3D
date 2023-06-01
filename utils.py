@@ -3,6 +3,7 @@ import numpy as np
 import random
 import torch
 import matplotlib.pyplot as plt
+from PIL import Image
 
 # fix seed
 def seed_torch(seed=0):
@@ -35,6 +36,10 @@ def show_box(box, ax):
     x0, y0 = box[0], box[1]
     w, h = box[2] - box[0], box[3] - box[1]
     ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))
+
+def img_resize(img, size):
+    img = img.resize(size, Image.ANTIALIAS)
+    return img
 
 
 # for detection omni3d
@@ -83,6 +88,11 @@ def detection(args, cfg, model):
 
         if im is None:
             continue
+
+        save_root_path = os.path.join(output_dir, im_name)
+        os.makedirs(save_root_path, exist_ok=True)
+        save_det_path = os.path.join(save_root_path, 'det')
+        os.makedirs(save_det_path, exist_ok=True)
         
         image_shape = im.shape[:2]  # h, w
 
@@ -154,30 +164,86 @@ def detection(args, cfg, model):
                 im_concat = np.concatenate((im_drawn_rgb, im_topdown), axis=1)
                 vis.imshow(im_concat)
 
-            util.imwrite(im_drawn_rgb, os.path.join(output_dir, im_name+'_boxes.jpg'))
-            util.imwrite(im_topdown, os.path.join(output_dir, im_name+'_novel.jpg'))
+            util.imwrite(im_drawn_rgb, os.path.join(save_det_path, im_name+'_3Dboxes.jpg'))
+            util.imwrite(im_topdown, os.path.join(save_det_path, im_name+'_novel.jpg'))
 
             # vis bbox_2d
-            util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
+            util.imwrite(img_draw_2d, os.path.join(save_det_path, im_name+'_faster2Dboxes.jpg'))
 
         else:
-            util.imwrite(img_draw_2d, os.path.join(output_dir, im_name+'_faster2Dboxes.jpg'))
-            util.imwrite(im, os.path.join(output_dir, im_name+'_boxes.jpg'))
+            util.imwrite(img_draw_2d, os.path.join(save_det_path, im_name+'_faster2Dboxes.jpg'))
+            util.imwrite(im, os.path.join(save_det_path, im_name+'_3Dboxes.jpg'))
 
         # save 3d bbox
-        util.save_json(os.path.join(output_dir, im_name+'_bbox3D.json'), save_bbox3d)
+        util.save_json(os.path.join(save_det_path, im_name+'_detection_results.json'), save_bbox3d)
 
         # save 3d bbox ply
         for i, mesh in enumerate(meshes):
-            IO().save_mesh(mesh, os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i)))
+            IO().save_mesh(mesh, os.path.join(save_det_path, im_name+'_bbox3D_{}.ply'.format(i)))
         
         tri_meshes = []
         for i in range(len(meshes)):
-            tri_meshes.append(trimesh.load(os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i))))
-            os.remove(os.path.join(output_dir, im_name+'_bbox3D_{}.ply'.format(i)))
+            tri_meshes.append(trimesh.load(os.path.join(save_det_path, im_name+'_bbox3D_{}.ply'.format(i))))
+            os.remove(os.path.join(save_det_path, im_name+'_bbox3D_{}.ply'.format(i)))
 
         # concatentate meshes
         scene_mesh = trimesh.util.concatenate(tri_meshes)
-        scene_mesh.export(os.path.join(output_dir, im_name+'_scene_bbox3D.ply'))
+        scene_mesh.export(os.path.join(save_det_path, im_name+'_scene_bbox3D.ply'))
 
+
+
+# for sam
+def get_crop_bbox(obj_vis_masks):
+    # calculate crop bbox
+    height, width, _ = obj_vis_masks.shape
+    vis_masks_idx = np.argwhere(obj_vis_masks == 1)
+    # print(vis_masks_idx.shape)
+    px = vis_masks_idx[:, 0]
+    py = vis_masks_idx[:, 1]
+    xmin, xmax = int(np.min(py)), int(np.max(py))       # W
+    ymin, ymax = int(np.min(px)), int(np.max(px))       # H
+    full_bbox_2d = [xmin, ymin, xmax, ymax]
+    x_center, y_center = (xmin + xmax) // 2, (ymin + ymax) // 2
+
+    square_length = max(xmax - xmin, ymax - ymin) + 100
+    x_square_begin, y_square_begin = max(0, x_center - square_length // 2), max(0, y_center - square_length // 2)
+    [x_square_end, y_square_end] = [min(width, x_square_begin + square_length), min(height, y_square_begin + square_length)]
+    crop_bbox = [x_square_begin, y_square_begin, x_square_end, y_square_end]
+
+
+    return crop_bbox
+
+
+# for fusion scene
+def get_mesh_scene(mesh_path, obj_dic):
+    x_rot_90 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
+    x_rot_mat = np.eye(4)
+    x_rot_mat[0:3, 0:3] = x_rot_90
+
+    y_rot_180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+    y_rot_mat = np.eye(4)
+    y_rot_mat[0:3, 0:3] = y_rot_180
+
+    
+    mesh = trimesh.load(mesh_path)
+    mesh.apply_transform(x_rot_mat)
+    mesh.apply_transform(y_rot_mat)
+
+    bbox3D = np.array(obj_dic['bbox3D'])
+    translation = np.array([bbox3D[0], bbox3D[1], bbox3D[2]])   # [tx, ty, tz]
+    gt_length = np.array([bbox3D[3], bbox3D[4], bbox3D[5]])     # [lx, ly, lz]
+
+    # scale mesh according to gt bbox size
+    mesh_bbox = mesh.bounding_box.extents                                           # [lx, ly, lz]
+    scale = gt_length / mesh_bbox
+    mesh.apply_scale(scale)
+
+    R = np.array(obj_dic['pose'])
+    mat = np.eye(4)
+    mat[0:3, 0:3] = R
+    mat[0:3, 3] = translation
+
+    mesh.apply_transform(mat)
+
+    return mesh
 
