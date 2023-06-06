@@ -85,6 +85,6 @@ Put the downloaded files in the `shap_e_model_cache` folder
 ## Run
 ```
 # push test image in `test_img/real_img`
-python demo.py --config-file cubercnn://omni3d/cubercnn_DLA34_FPN.yaml --input-folder "test_img/real_img" --threshold 0.25 MODEL.WEIGHTS cubercnn://omni3d/cubercnn_DLA34_FPN.pth OUTPUT_DIR output/demo
+python demo.py --config-file cubercnn://omni3d/cubercnn_DLA34_FPN.yaml --input-folder "test_img/real_img" --threshold 0.25 --sam_checkpoint segment-anything/checkpoints/sam_vit_h_4b8939.pth --model_type vit_h --shap_e_cache_dir shap-e/shap_e/examples/shap_e_model_cache  MODEL.WEIGHTS cubercnn://omni3d/cubercnn_DLA34_FPN.pth OUTPUT_DIR output/demo
 ```
 
