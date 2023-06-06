@@ -51,6 +51,17 @@ pip install -e .
 pip install opencv-python pycocotools matplotlib onnxruntime onnx
 ```
 
+6.install omni3d
+
+```
+git clone https://github.com/facebookresearch/omni3d.git
+python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+# install pandas
+pip install pandas
+```
+
+
 ## Download checkpoints
 
 1.SAM
