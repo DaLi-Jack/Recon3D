@@ -3,7 +3,7 @@ import os
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
-
+from pyvistaqt import QtInteractor, MainWindow
 from PySide6.Qt3DCore import (Qt3DCore)
 from PySide6.Qt3DExtras import (Qt3DExtras)
 
@@ -50,13 +50,14 @@ class MainWindow(QMainWindow):
         # add image show
         self.fig = Figure()
         self.canvas = FigureCanvas(self.fig)
-        self.fig_3d = Figure()
-        self.canvas_3d = FigureCanvas(self.fig_3d)
+        # add mesh show 
+        self.init_ploter()
         
         # Add image upload button
         upload_button = QPushButton("Upload Image")
-        ...
         upload_button.clicked.connect(self.upload_upload)
+        run_bt = QPushButton("Run")
+        
         # Add image list widget (lower part)
         image_list = QListWidget()
         image_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)   
@@ -67,16 +68,13 @@ class MainWindow(QMainWindow):
         self.upper_layout = QHBoxLayout()
         upper_layout = self.upper_layout
         upper_layout.addWidget(self.canvas)  # Add matplotlib canvas
-        # upper_layout.addWidget(open3d_view, stretch=2)  # Add Open3D view  
-        # self.update_3d('./output/demo/0005/shape/cabinet 0.33.ply')
-        upper_layout.addWidget(self.canvas_3d)
+        upper_layout.addWidget(self.plotter)
         upper_layout.addWidget(image_list)
-        # upper_width = image_list.parent().width()
         # image_list.setFixedHeight(upper_width*0.3)
         
-        lower_layout = QVBoxLayout()
-        lower_layout.addWidget(upload_button, stretch=2)     # Add upload button
-        # lower_layout.addWidget(image_list)        # Add image list
+        lower_layout = QHBoxLayout()
+        lower_layout.addWidget(run_bt)
+        lower_layout.addWidget(upload_button)     # Add upload button
         
         layout = QVBoxLayout()
         layout.addLayout(upper_layout)
@@ -86,6 +84,27 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
         
+        
+    def init_ploter(self):
+        # create the frame
+        self.frame = QFrame()
+        vlayout = QVBoxLayout()
+        # add the pyvista interactor object
+        self.plotter = QtInteractor(self.frame)
+        vlayout.addWidget(self.plotter.interactor)
+        # sphere = pv.Sphere()
+        # self.plotter.add_mesh(sphere, show_edges=True)
+        # self.plotter.reset_camera()
+        # self.plotter.show()
+        return 
+        
+    def update_mesh(self, file):
+        mesh = pv.read(file)
+        self.plotter.clear()
+        self.plotter.add_mesh(mesh, rgb=True)
+        self.plotter.reset_camera()
+        
+
     def set_image_list(self, widget, path):
         widget.clear()
         images = glob(os.path.join(path, '*.jpg'))
@@ -97,6 +116,7 @@ class MainWindow(QMainWindow):
             
     def imagelist_select(self, item):
         self.now_item = item
+        
         
     def update_fig(self, image_path):
         if image_path:
@@ -111,23 +131,7 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(None, "Upload Image", "", 
                                             "Image Files (*.png *.jpg *.bmp)")
         self.fig.clear()
-        self.update_fig(file_path)
-        
-    def update_3d(self, mesh_path):
-        if mesh_path:
-            self.fig_3d.clear()
-            plydata = plyfile.PlyData.read(mesh_path)
-            vertices = np.vstack([plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']])
-            print(vertices, plydata['face'])
-            faces = plydata['face']#['vertex_indices'] 
-            ax = self.fig_3d.add_subplot(111, projection="3d")
-            ax.plot_trisurf(vertices[:,0], vertices[:,1], vertices[:,2], 
-                cmap='viridis', edgecolor='none')
-            ax.set_xlabel('X Label')
-            ax.set_ylabel('Y Label')
-            ax.set_zlabel('Z Label')
-            ax.show()
-            self.canvas_3d.draw()        
+        self.update_fig(file_path)    
 
         
 
