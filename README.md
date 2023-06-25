@@ -88,3 +88,16 @@ Put the downloaded files in the `shap_e_model_cache` folder
 python demo.py --config-file cubercnn://omni3d/cubercnn_DLA34_FPN.yaml --input-folder "test_img/real_img" --threshold 0.25 --sam_checkpoint segment-anything/checkpoints/sam_vit_h_4b8939.pth --model_type vit_h --shap_e_cache_dir shap-e/shap_e/examples/shap_e_model_cache  MODEL.WEIGHTS cubercnn://omni3d/cubercnn_DLA34_FPN.pth OUTPUT_DIR output/demo
 ```
 
+### Run QT app
+```
+python app_qt.py
+```
+![app image](./app.png)
+- click upload button, choose a image and upload, then run Run Recon button, the pipeline will auto run.
+- wait a minute, the all result will show in the app, including detection, segmentation, inpainting and 3d model part.
+- you can choose the object which you want to refine in the top combo layout, like 'sofa 0.96'
+- In first column, first row is uploaded image,  second row is detection result.
+- In second column, first row is segmentation prompt input layout(todo), click one position and click save, then run, the segmentation will rerun by your prompt. Second row is segmentation result, you can drug and mask points with  mouse left button, add any mask key points with clicking mouse left button, and delete and points with mouse right button in points position. Click save, the changed segmentation will saved.
+- In third column, first row is inpaint input mask image, the second row is inpainting result image. In the inpaint input layout, you can paint any area, the click save and rerun inpaint button, the painted area will be inpainting. You can also input the text prompt before rerun inpainting, like 'a brown sofa'.
+- In for fourth column, top layout is 3D show layout, the selected object is painted with red color, you can move this object along it's local xyz axis, the rotate along it's z axis( only +- 90°).
+
