@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import cv2
+from copy import deepcopy
 import json
 
 from segment_anything import sam_model_registry, SamPredictor
@@ -72,7 +73,7 @@ class SAM():
         self.predictor.set_image(image)
 
 
-    def run(self, input_box, det_text, save_sam_path, img_path, use_inpainting):
+    def run(self, input_box, det_text, save_sam_path, use_inpainting):
         obj_vis_masks, scores, _ = self.predictor.predict(
             point_coords=None,
             point_labels=None,
@@ -103,7 +104,8 @@ class SAM():
         # plt.show()
 
         # get vis object image, use PIL
-        img = Image.open(img_path)
+        # img = Image.open(img_path)
+        img = deepcopy(self.image)
         img_np = np.array(img)
         img_np = img_np[:, :, :3]               # remove alpha channel(if have)
         height, width, _ = img_np.shape
@@ -114,6 +116,7 @@ class SAM():
         save_vis_img = save_vis_img[y_square_begin:y_square_end, x_square_begin:x_square_end, :]            # crop square image
         save_vis_img = Image.fromarray(save_vis_img)
         save_vis_img.save(os.path.join(save_sam_path, det_text+'_vis.png'))
+        cv2.imwrite(os.path.join(save_sam_path, det_text+'_mask.png'), obj_vis_masks*255)
         # save_vis_img.show()
 
         if use_inpainting:

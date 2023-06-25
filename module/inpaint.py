@@ -25,14 +25,18 @@ class DiffusionInpaint():
         pipe.to(device)
         self.pipe = pipe
 
-    def run(self, prompt, save_sam_path, det_text, save_inpaint_path):
-        vis_img = Image.open(os.path.join(save_sam_path, det_text+'_vis.png'))
+    def run(self, prompt, item, save_inpaint_path):
+        image_path = item['sam_vis']
+        mask_path = item['diffuse_mask']
+        det_text = item['name']
+        vis_img = Image.open(image_path)
         vis_img = img_resize(vis_img, (512, 512))
-        mask_img = Image.open(os.path.join(save_sam_path, det_text+'_diffuse_mask.png'))
+        mask_img = Image.open(mask_path)
         mask_img = img_resize(mask_img, (512, 512))
         image = self.pipe(prompt=prompt, image=vis_img, mask_image=mask_img).images[0]
         # image = pipe(image=image, mask_image=mask_image).images[0]
         image.save(os.path.join(save_inpaint_path, det_text+'_inpaint.png'))
+        item['inpaint_res'] = os.path.join(save_inpaint_path, det_text+'_inpaint.png')
         
 
 if __name__ == '__main__':

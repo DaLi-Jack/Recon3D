@@ -61,7 +61,7 @@ class Omni3DDet():
         self.model = model
 
 
-    def run(self):
+    def run(self, image_path):
         with torch.no_grad():
             list_of_ims = util.list_files(os.path.join(self.args.input_folder, ''), '*')
 
@@ -86,7 +86,8 @@ class Omni3DDet():
             cats = metadata['thing_classes']
             
             for path in list_of_ims:
-
+                if path != image_path:
+                    continue
                 im_name = util.file_parts(path)[1]
                 im = util.imread(path)
                 img_draw_2d = copy.deepcopy(im)
@@ -192,8 +193,9 @@ class Omni3DDet():
                     os.remove(os.path.join(save_det_path, im_name+'_bbox3D_{}.ply'.format(i)))
 
                 # concatentate meshes
-                scene_mesh = trimesh.util.concatenate(tri_meshes)
-                scene_mesh.export(os.path.join(save_det_path, im_name+'_scene_bbox3D.ply'))
+                if len(tri_meshes):
+                    scene_mesh = trimesh.util.concatenate(tri_meshes)
+                    scene_mesh.export(os.path.join(save_det_path, im_name+'_scene_bbox3D.ply'))
 
 
 
