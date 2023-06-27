@@ -26,71 +26,72 @@ from modellib import Robot
 from module.fusion import remove_xy_rotation, get_mesh_scene
 class MeshObj:
     def __init__(self, item, plotter):
+        self.rot_angle = 0
+        self.translate = np.array([0., 0., 0.])
         self.item = item
         self.name = self.item['name']
-        self.mesh = pv.read(item['mesh_world'])
+        self.mesh_file = self.item['mesh']
         self.plotter = plotter
         bbox3D = np.array(item['bbox3D'])
-        self.translation = np.array([bbox3D[0], bbox3D[1], bbox3D[2]])
+        self.init_translation = np.array([bbox3D[0], bbox3D[1], bbox3D[2]])
         self.gt_length = np.array([bbox3D[5], bbox3D[4], bbox3D[3]]) 
+        
         self.size = self.gt_length[0] * self.gt_length[1] * self.gt_length[2]
-        R = np.array(item['pose'])
-        R = remove_xy_rotation(R)
-        self.x_axis = self.get_local_axis([1, 0, 0, 1], R, self.translation)
-        self.y_axis = self.get_local_axis([0, 1, 0, 1], R, self.translation)
-        self.z_axis = self.get_local_axis([0, 0, 1, 1], R, self.translation)
-        self.plotter.add_mesh(self.mesh,rgb=True, name=item['name'])
-        self.plane = pv.Plane(center=self.translation, direction=self.get_axis_vector('z'), i_size=10, j_size=10)
-        self.plane.translate([0, -self.gt_length[1]/2, 0], inplace=True)
-        # plotter.add_mesh(self.x_axis, name=f"{item['name']}_x")
-        # plotter.add_mesh(self.y_axis, name=f"{item['name']}_y")
-        # plotter.add_mesh(self.z_axis, name=f"{item['name']}_z")
+        self.init_pose = self.make_transformat_from_R(np.array(item['pose']))
+        self.camera_pose = np.eye(4)
         
-    def show_plane(self):
-        self.plotter.add_mesh(self.plane, name=self.name+'_plane')
-        
-    def to_world(self):
-        x_rot_90 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-        x_rot_mat = np.eye(4)
-        x_rot_mat[0:3, 0:3] = x_rot_90
+        self.plane = pv.Plane(center=self.init_translation, direction=[0, 1, 0], i_size=10, j_size=10)
+        self.plane.translate([0, -self.gt_length[1], 0], inplace=True)
+        self.show_plane = False
+        self.hightlight = False
 
-        y_rot_180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-        y_rot_mat = np.eye(4)
-        y_rot_mat[0:3, 0:3] = y_rot_180
-        self.mesh.transform(x_rot_mat)
-        self.mesh.transform(y_rot_mat)
-        mesh_bbox = self.mesh.dimensions[:3] 
-        scale = self.gt_length / mesh_bbox
         
+    def update_meshfile(self, file):
+        self.mesh_file = file
+    
+    def get_mesh_shape(self):
+        xmin, xmax, ymin, ymax, zmin, zmax = self.mesh.bounds
+        x_length = xmax - xmin 
+        y_length = ymax - ymin 
+        z_length = zmax - zmin 
+        return np.array([x_length, y_length, z_length])
+    
+    def scale_mesh(self):
+        scale = self.gt_length / self.get_mesh_shape()
+        self.mesh.scale(scale, inplace=True)
         
-    def highlight(self):
-        self.plotter.add_mesh(self.mesh, color='red', name=self.item['name'])
+    def init_mesh(self):
+        self.mesh = pv.read(self.mesh_file)
+        self.mesh.translate(-np.array(self.mesh.center), inplace=True)
+        self.mesh.rotate_x(-90, inplace=True)
+        self.mesh.rotate_y(180, inplace=True)
         
-    def nohighlight(self):
-        self.plotter.add_mesh(self.mesh,rgb=True, name=self.item['name'])
-        
-        
-    def get_local_axis(self, base_vector, R, translation):
-        vector = np.array([base_vector]).transpose(1, 0)
-        x_rot_90 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-        x_rot_mat = np.eye(4)
-        x_rot_mat[0:3, 0:3] = x_rot_90
 
-        y_rot_180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-        y_rot_mat = np.eye(4)
-        y_rot_mat[0:3, 0:3] = y_rot_180
-        
+    def make_transformat_from_R(self, R):
         mat = np.eye(4)
         mat[0:3, 0:3] = R
-        # mat[0:3, 3] = translation
+        return mat
+        
+    # def get_local_axis(self, base_vector, R, translation):
+    #     vector = np.array([base_vector]).transpose(1, 0)
+    #     x_rot_90 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
+    #     x_rot_mat = np.eye(4)
+    #     x_rot_mat[0:3, 0:3] = x_rot_90
+
+    #     y_rot_180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+    #     y_rot_mat = np.eye(4)
+    #     y_rot_mat[0:3, 0:3] = y_rot_180
+        
+    #     mat = np.eye(4)
+    #     mat[0:3, 0:3] = R
+    #     # mat[0:3, 3] = translation
                 
-        vector = np.dot(x_rot_mat, vector)
-        vector = np.dot(y_rot_mat, vector)
-        vector = np.dot(mat, vector).transpose(1, 0)[0][:3]
-        axis = pv.Line(pointa=[0, 0, 0], pointb=vector)
-        return axis
+    #     vector = np.dot(x_rot_mat, vector)
+    #     vector = np.dot(y_rot_mat, vector)
+    #     vector = np.dot(mat, vector).transpose(1, 0)[0][:3]
+    #     axis = pv.Line(pointa=[0, 0, 0], pointb=vector)
+    #     return axis
     
-    # def get_bbox(self, R, translation):
         
     
 
@@ -122,20 +123,50 @@ class MeshObj:
         
             
     def rotate_z(self, angle):
-        rotate_vector = self.get_axis_vector("z")
-        self.mesh.rotate_vector(rotate_vector, angle, point=self.mesh.center, inplace=True)
-        self.update_axis(rotate_vector, angle)
+        self.rot_angle += 90
+        self.update_mesh()
         
     def translate_x(self, distance):
-        des = self.get_axis_vector("x")*distance
-        self.mesh.translate(des, inplace=True)
+        self.translate += np.array([distance, 0, 0])
+        self.update_mesh()
+        # self.mesh.translate([distance, 0, 0])
+        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+        
         
     def translate_y(self, distance):
-        des = self.get_axis_vector("y")*distance
-        self.mesh.translate(des, inplace=True)
+        self.translate += np.array([0, distance, 0])
+        self.update_mesh()
+        # self.mesh.translate([0, distance, 0])
+        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+        
+        
     def translate_z(self, distance):
-        des = self.get_axis_vector("z")*distance
-        self.mesh.translate(des, inplace=True)
+        self.translate += np.array([0, 0, distance])
+        self.update_mesh()
+        # self.mesh.translate([0, 0, distance])
+        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+        
+        
+    def update_mesh(self):
+        self.init_mesh()
+        self.mesh.rotate_y(self.rot_angle, inplace=True)
+        self.scale_mesh()
+        self.mesh.transform(self.init_pose, inplace=True)
+        
+        self.mesh.translate(self.init_translation, inplace=True)
+        self.mesh.transform(self.camera_pose, inplace=True)
+        # print(self.gt_length, self.translate, self.mesh.center)
+        self.mesh.translate(self.translate, inplace=True)
+        
+        self.plotter.enable_surface_picking()
+        if self.hightlight:
+            self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+        else:
+            self.plotter.add_mesh(self.mesh, rgb=True, name=self.name)
+        if self.show_plane:
+            self.plotter.add_floor(face='-y')
+            # self.plotter.add_bounding_box(line_width=5, color='black')
+            # self.plotter.add_mesh(self.plane, name=self.name+'_plane')
 
 def get_items(path):
     det_path = os.path.join(path, 'det', '0005_detection_results.json')
@@ -181,24 +212,22 @@ class MainWindow(QWidget):
         central_widget = QWidget()
         central_widget.setLayout(layout)
         self.setLayout(layout)
-        # self.update_layout()
+        self.update_layout()
         
     def init_layout(self):
         self.items_combo.clear()
-        # self.robot.items = items
+        self.robot.items = items
         self.robot.set(image_path = items['test_image'])
-        
         self.items = self.robot.items
+        self.set_plotter_items(self.items['items'])
         
         
     def update_layout(self):
-        # self.items = items
         print('update')
         self.canvas.update_bg(self.items['test_image'])
         if 'items' in self.items.keys() and len(list(self.items['items'].keys())) == 0:
             return
         self.detection_canvas.update_bg(self.items['det_res'])
-        self.set_plotter_items(self.items['items'])
         self.sam_prompt.update_canvas(background=self.items['test_image'])
         current_text = self.items_combo.currentText()
         self.robot.run_fusion()
@@ -208,7 +237,6 @@ class MainWindow(QWidget):
             if self.items_combo.findText(name) == -1: 
                 self.items_combo.addItem(name)
             if current_text == name:
-                
                 if 'mask' in item.keys():
                     self.sam_widget.update_canvas(background=self.items['test_image'], mask=item['mask'])
                 if 'diffuse_mask' in item.keys():
@@ -217,16 +245,12 @@ class MainWindow(QWidget):
                 if 'inpaint_res' in item.keys():
                     self.inpaint_output_widget.update_bg(item['inpaint_res'])
                 if 'mesh_obj' in item.keys():
-                    item['mesh_obj'].highlight()
-            if 'mesh_obj' in item.keys():
-                if item['mesh_obj'].size > max_size:
-                    max_size = item['mesh_obj'].size
-                    max_item = item['mesh_obj']
-        if max_item:
-            max_item.show_plane()
-                
-        # for name, item in self.items['items'].items():
-        #     self.items_combo.addItem(name)
+                    item['mesh_obj'].highlight = True 
+            else:
+                if 'mesh_obj' in item.keys():
+                    item['mesh_obj'].highlight = False
+            item['mesh_obj'].update_mesh()
+
         
     def create_layout(self):
         layout = QHBoxLayout()
@@ -480,70 +504,42 @@ class MainWindow(QWidget):
         # create the frame
         self.frame = QFrame()
         self.plotter = QtInteractor(self.frame)
-        self.plotter.add_axes(labels_off=False)
+        self.plotter.add_axes(
+                color='black',
+                labels_off=False)
         self.plotter.set_background('white')
         self.plotter.view_vector([1, -1, 1], [0, -1, 0])
         return
-    
-    def get_up_vector(self, R, translation):
-        vector = np.array([[0, 0, 1, 1]]).transpose(1, 0)
-        x_rot_90 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-        x_rot_mat = np.eye(4)
-        x_rot_mat[0:3, 0:3] = x_rot_90
-
-        y_rot_180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-        y_rot_mat = np.eye(4)
-        y_rot_mat[0:3, 0:3] = y_rot_180
-        
-        vector = np.dot(x_rot_mat, vector)
-        vector = np.dot(y_rot_mat, vector)
-
-
-        mat = np.eye(4)
-        mat[0:3, 0:3] = R
-        mat[0:3, 3] = translation
-        
-        vector = np.dot(mat, vector).transpose(1, 0)[0][:3]
-        return vector
 
     def set_plotter_items(self, items):
+        max_size = 0
+        camera_pose = np.eye(4)
+        mesh_center = np.zeros([0, 0, 0])
+        max_item = None 
         for name, item in items.items():
-            # if 'mesh_obj' in item.keys():
-            #     continue
-            if 'mesh_world' in item.keys():
+            if 'mesh' in item.keys():
                 mesh_obj = MeshObj(item, self.plotter)
+                if mesh_obj.size > max_size:
+                    camera_pose = mesh_obj.init_pose
+                    mesh_center = -mesh_obj.init_translation
+                    max_item = mesh_obj 
+                    max_size = mesh_obj.size
                 item['mesh_obj'] = mesh_obj
-        
-    def update_mesh(self, file):
-        mesh = pv.read(file)
-        self.plotter.clear()
-        self.plotter.add_mesh(mesh, rgb=True)
-        self.plotter.reset_camera()
-    
+        if max_item:
+            max_item.show_plane = True
+        for name, item in items.items():
+            if 'mesh' in item.keys():
+                mesh_obj = item['mesh_obj']       
+                mesh_obj.camera_pose = np.linalg.inv(camera_pose)
+                mesh_obj.camera_pose[:3, -1:] = np.array([mesh_center]).transpose(1, 0)
+                # mesh_obj.camera_pose[:3, 3]
+                # mesh_obj.init_translation -= mesh_center
+                # mesh_obj.update_mesh()
 
     # add sam process to fix sam result 
     def onComboChanged(self):
-        select_text = self.items_combo.currentText()
-        # item = self.items['items'][text]
-        # item_mesh_obj = item['mesh_obj']
         self.update_layout()
-        for text, item in self.items['items'].items():
-            if text == select_text:
-                self.sam_prompt.update_canvas(background=self.items['test_image'])
-                if 'mask' in item.keys():
-                    self.sam_widget.update_canvas(background=self.items['test_image'], mask=item['mask'])
-                if 'diffuse_mask' in item.keys():
-                    self.inpaint_widget.update_canvas(background=item['sam_vis'])
-                    self.inpaint_widget.update()
-                if 'inpaint_res' in item.keys():
-                    self.inpaint_output_widget.update_bg(item['inpaint_res'])
-                if 'mesh_obj' in item.keys():
-                    item['mesh_obj'].highlight()
-            else:
-                if 'mesh_obj' in item.keys():
-                    item['mesh_obj'].nohighlight()
-        
-            
+
     def imagelist_select(self, item):
         self.now_item = item
         

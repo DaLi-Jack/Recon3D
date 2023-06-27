@@ -150,10 +150,19 @@ class Robot:
         flag, detection_results = self.get_detection_result()
         items = {}
         if flag:
+            max_size = 0
+            camera_pose = np.array([[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], [0, 0, 0, 1]])
             for det_text, obj_dic in detection_results.items():
                 item = {}
                 for k, v in obj_dic.items():
                     item[k] = v
+                bbox3D = np.array(item['bbox3D'])
+                gt_length = np.array([bbox3D[5], bbox3D[4], bbox3D[3]]) 
+                size = self.gt_length[0] * self.gt_length[1] * self.gt_length[2]
+                item['size'] = size 
+                if size > max_size:
+                    max_size = size 
+                    camera_pose = np.linalg.inv(np.array(item['pose']))
                 item['name'] = det_text
                 items[det_text] = item
                 
