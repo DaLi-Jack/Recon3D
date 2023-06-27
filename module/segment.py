@@ -128,6 +128,62 @@ class SAM():
             crop_diffuse_mask.save(os.path.join(save_sam_path, det_text+'_diffuse_mask.png'))
 
 
+    def update(self, add_points, input_box, det_text, save_sam_path, img_path, use_inpainting):
+        point_labels = np.ones((add_points.shape[0], ), dtype=np.int32)        # 1 for foreground, 0 for background
+        obj_vis_masks, scores, _ = self.predictor.predict(
+            point_coords=add_points,
+            point_labels=point_labels,
+            box=input_box,
+            multimask_output=False,
+        )
+
+        # save object visable masks
+        plt.figure(figsize=(10, 10))
+        plt.imshow(self.image)
+        show_mask(obj_vis_masks[0], plt.gca())
+        show_box(input_box, plt.gca())
+        plt.axis('off')
+        plt.savefig(os.path.join(save_sam_path, det_text+'_sam_update.png'))
+        # plt.show()
+
+        obj_vis_masks = obj_vis_masks.transpose(1, 2, 0)  # H x W x 1
+
+        # get crop bbox
+        crop_bbox = get_crop_bbox(obj_vis_masks)
+        [x_square_begin, y_square_begin, x_square_end, y_square_end] = crop_bbox
+
+        # save crop bbox in image
+        plt.figure(figsize=(10,10))
+        plt.imshow(self.image)
+        show_box(crop_bbox, plt.gca())
+        plt.savefig(os.path.join(save_sam_path, det_text+'_crop_bbox_update.png'))
+        # plt.show()
+
+        # get vis object image, use PIL
+        img = Image.open(img_path)
+        img_np = np.array(img)
+        img_np = img_np[:, :, :3]               # remove alpha channel(if have)
+        height, width, _ = img_np.shape
+
+        # save vis object image
+        save_vis_img = np.ones((height, width, 3), dtype=np.uint8) * 225
+        save_vis_img[obj_vis_masks[:, :, 0] == 1] = img_np[obj_vis_masks[:, :, 0] == 1]
+        save_vis_img = save_vis_img[y_square_begin:y_square_end, x_square_begin:x_square_end, :]            # crop square image
+        save_vis_img = Image.fromarray(save_vis_img)
+        save_vis_img.save(os.path.join(save_sam_path, det_text+'_vis_update.png'))
+        # save_vis_img.show()
+
+        if use_inpainting:
+            # get inpainting mask, now set the bbox 2d as diffuser mask temporarily
+            bbox_mask = np.zeros((height, width, 1), dtype=np.uint8)
+            bbox_mask[int(input_box[1]):int(input_box[3]), int(input_box[0]):int(input_box[2])] = 1
+
+            diffuser_mask = bbox_mask - obj_vis_masks
+            crop_diffuse_mask = diffuser_mask[y_square_begin:y_square_end, x_square_begin:x_square_end, :]            # setting crop, must be square
+            crop_diffuse_mask = crop_diffuse_mask[:, :, 0]
+            crop_diffuse_mask = Image.fromarray(crop_diffuse_mask * 255)
+            crop_diffuse_mask.save(os.path.join(save_sam_path, det_text+'_diffuse_mask_update.png'))
+
 
 
 if __name__ == "__main__":
