@@ -44,12 +44,17 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     inpaint = DiffusionInpaint(device)
 
-    prompt = 'a sofa'
+    prompt = 'a table'
     save_sam_path = '/home/nijunfeng/mycode/recon3D/output/test_det/000738_rgb_003787/sam'
-    det_text = 'sofa 0.99'
-    save_inpaint_path = '/home/nijunfeng/mycode/recon3D/output/test_det/000738_rgb_003787/inpaint'
+    det_text = 'table 0.83'
+    save_inpaint_path = '/home/zyw/data/repo_common/Recon3D/output/demo/0004/inpaint/'
     os.makedirs(save_inpaint_path, exist_ok=True)
-    inpaint.run(prompt, save_sam_path, det_text, save_inpaint_path)
+    item = {
+        'sam_vis': '/home/zyw/data/repo_common/Recon3D/output/demo/0004/sam/table 0.83_vis.png',
+        'diffuse_mask': '/home/zyw/data/repo_common/Recon3D/output/demo/0004/sam/table 0.83_diffuse_mask.png',
+        'name': det_text
+    }
+    inpaint.run(prompt, item, save_inpaint_path)
 
     print('done')
 

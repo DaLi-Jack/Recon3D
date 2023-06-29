@@ -40,7 +40,7 @@ def get_mesh_scene(mesh_path, obj_dic):
     mesh.apply_scale(scale)
 
     R = np.array(obj_dic['pose'])
-    R = remove_xy_rotation(R)
+    # R = remove_xy_rotation(R)
     
     mat = np.eye(4)
     mat[0:3, 0:3] = R
