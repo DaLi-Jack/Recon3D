@@ -19,7 +19,7 @@ import numpy as np
 import pyvista as pv
 import plyfile
 import json 
-from draw_canvas import Qpaint_canvas, get_maskcontours, Image_canvas, Brush_canvas
+from draw_canvas import Qpaint_canvas, Image_canvas, Brush_canvas, Position_canvas
 from IPython import embed
 from modellib import Robot
 
@@ -40,10 +40,10 @@ class MeshObj:
         self.init_pose = self.make_transformat_from_R(np.array(item['pose']))
         self.camera_pose = np.eye(4)
         
-        self.plane = pv.Plane(center=self.init_translation, direction=[0, 1, 0], i_size=10, j_size=10)
-        self.plane.translate([0, -self.gt_length[1], 0], inplace=True)
+        # self.plane = pv.Plane(center=self.init_translation, direction=[0, 1, 0], i_size=10, j_size=10)
+        # self.plane.translate([0, -self.gt_length[1], 0], inplace=True)
         self.show_plane = False
-        self.hightlight = False
+        self.highlight = False
 
         
     def update_meshfile(self, file):
@@ -55,6 +55,16 @@ class MeshObj:
         y_length = ymax - ymin 
         z_length = zmax - zmin 
         return np.array([x_length, y_length, z_length])
+    
+    def show_mesh_bbox(self):
+        bbox = pv.Box(self.mesh.bounds)
+        lines = bbox.lines
+        for i in range(0, lines.shape[0], 2):
+            print(lines, lines[i:i+2, :])
+            self.plotter.add_lines(lines[i:i+2, :], color='red', width=3) 
+            
+        # return box 
+        
     
     def scale_mesh(self):
         scale = self.gt_length / self.get_mesh_shape()
@@ -91,9 +101,27 @@ class MeshObj:
     #     vector = np.dot(mat, vector).transpose(1, 0)[0][:3]
     #     axis = pv.Line(pointa=[0, 0, 0], pointb=vector)
     #     return axis
-    
+
+    # def get_axis_vector(self, axis):
+    #     if axis == 'x':
+    #         return np.array(self.x_axis.points)[1]
+    #     elif axis == "y":
+    #         return np.array(self.y_axis.points)[1]
+    #     elif axis == 'z':
+    #         return np.array(self.z_axis.points)[1]
+    #     else:
+    #         return [0, 0, 1]
         
-    
+    # def update_axis(self, rotate_vector, angle):
+    #     self.x_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
+    #     self.y_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
+    #     self.z_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
+        
+    # def rotate_x(self, angle):
+    #     rotate_vector = self.get_axis_vector("x")
+    #     self.mesh.rotate_vector(rotate_vector, angle, point=self.mesh.center, inplace=True)
+    #     self.update_axis(rotate_vector, angle)
+
 
     def get_axis_vector(self, axis):
         if axis == 'x':
@@ -105,21 +133,20 @@ class MeshObj:
         else:
             return [0, 0, 1]
         
-    def update_axis(self, rotate_vector, angle):
-        self.x_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
-        self.y_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
-        self.z_axis.rotate_vector(rotate_vector, angle, point=[0, 0, 0], inplace=True)
+    def get_axis_vector(self, axis):
+        if axis == 'x':
+            return np.array(self.x_axis.points)[1]
+        elif axis == "y":
+            return np.array(self.y_axis.points)[1]
+        elif axis == 'z':
+            return np.array(self.z_axis.points)[1]
+        else:
+            return [0, 0, 1]
         
-    def rotate_x(self, angle):
-        rotate_vector = self.get_axis_vector("x")
-        self.mesh.rotate_vector(rotate_vector, angle, point=self.mesh.center, inplace=True)
-        self.update_axis(rotate_vector, angle)
-        
-        
-    def rotate_y(self, angle):
-        rotate_vector = self.get_axis_vector("y")
-        self.mesh.rotate_vector(rotate_vector, angle, point=self.mesh.center, inplace=True)
-        self.update_axis(rotate_vector, angle)
+    # def rotate_y(self, angle):
+    #     rotate_vector = self.get_axis_vector("y")
+    #     self.mesh.rotate_vector(rotate_vector, angle, point=self.mesh.center, inplace=True)
+    #     self.update_axis(rotate_vector, angle)
         
             
     def rotate_z(self, angle):
@@ -129,25 +156,23 @@ class MeshObj:
     def translate_x(self, distance):
         self.translate += np.array([distance, 0, 0])
         self.update_mesh()
-        # self.mesh.translate([distance, 0, 0])
-        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+
         
         
     def translate_y(self, distance):
         self.translate += np.array([0, distance, 0])
         self.update_mesh()
-        # self.mesh.translate([0, distance, 0])
-        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+
         
         
     def translate_z(self, distance):
         self.translate += np.array([0, 0, distance])
         self.update_mesh()
-        # self.mesh.translate([0, 0, distance])
-        # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+
         
         
     def update_mesh(self):
+        # self.plotter.clear()
         self.init_mesh()
         self.mesh.rotate_y(self.rot_angle, inplace=True)
         self.scale_mesh()
@@ -159,18 +184,19 @@ class MeshObj:
         self.mesh.translate(self.translate, inplace=True)
         
         self.plotter.enable_surface_picking()
-        if self.hightlight:
-            self.plotter.add_mesh(self.mesh, color='red', name=self.name)
-        else:
-            self.plotter.add_mesh(self.mesh, rgb=True, name=self.name)
-        if self.show_plane:
-            self.plotter.add_floor(face='-y')
+        if self.highlight:
+            self.show_mesh_bbox()
+            # self.plotter.add_mesh(self.mesh, color='red', name=self.name)
+        
+        self.plotter.add_mesh(self.mesh, rgb=True, name=self.name)
+        # if self.show_plane:
+        #     self.plotter.add_floor(face='-y', i_resolution=10, j_resolution=10, pad=0.2)
             # self.plotter.add_bounding_box(line_width=5, color='black')
             # self.plotter.add_mesh(self.plane, name=self.name+'_plane')
 
 def get_items(path):
-    det_path = os.path.join(path, 'det', '0005_detection_results.json')
-    image_name = '0005'
+    det_path = os.path.join(path, 'det', '0004_detection_results.json')
+    image_name = '0004'
     with open(det_path, "r") as f:
         det_results = json.load(f)
     sam_path = os.path.join(path, 'sam')
@@ -194,7 +220,7 @@ def get_items(path):
         item['name'] = det_text
         items[det_text] = item
     result = {
-        'test_image': './test_img/real_img/0005.png',
+        'test_image': './test_img/real_img/0004.png',
         'det_res': det_res,
         'items': items,
         'scene': os.path.join(path, "scene.ply"),
@@ -202,7 +228,7 @@ def get_items(path):
     return result
     
 # class viewer 
-items = get_items("./output/demo/0005/")
+items = get_items("./output/demo/0004/")
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -216,21 +242,25 @@ class MainWindow(QWidget):
         
     def init_layout(self):
         self.items_combo.clear()
-        self.robot.items = items
-        self.robot.set(image_path = items['test_image'])
         self.items = self.robot.items
-        self.set_plotter_items(self.items['items'])
+        
+        # self.robot.items = items
+        # self.robot.set(image_path = items['test_image'])
+        # self.items = self.robot.items
+        # self.set_plotter_items(self.items['items'])
         
         
     def update_layout(self):
         print('update')
+        if 'test_image' not in self.items.keys():
+            return 
         self.canvas.update_bg(self.items['test_image'])
         if 'items' in self.items.keys() and len(list(self.items['items'].keys())) == 0:
             return
         self.detection_canvas.update_bg(self.items['det_res'])
         self.sam_prompt.update_canvas(background=self.items['test_image'])
         current_text = self.items_combo.currentText()
-        self.robot.run_fusion()
+        # self.robot.run_fusion()
         max_size = 0
         max_item = None 
         for name, item in self.items['items'].items():
@@ -238,7 +268,8 @@ class MainWindow(QWidget):
                 self.items_combo.addItem(name)
             if current_text == name:
                 if 'mask' in item.keys():
-                    self.sam_widget.update_canvas(background=self.items['test_image'], mask=item['mask'])
+                    self.sam_widget.update_bg(item['sam_res'])
+                    # self.sam_widget.update_canvas(background=self.items['test_image'], mask=item['mask'])
                 if 'diffuse_mask' in item.keys():
                     self.inpaint_widget.update_canvas(background=item['sam_vis'])
                     self.inpaint_widget.update()
@@ -249,7 +280,8 @@ class MainWindow(QWidget):
             else:
                 if 'mesh_obj' in item.keys():
                     item['mesh_obj'].highlight = False
-            item['mesh_obj'].update_mesh()
+            if 'mesh_obj' in item.keys():
+                item['mesh_obj'].update_mesh()
 
         
     def create_layout(self):
@@ -287,8 +319,9 @@ class MainWindow(QWidget):
         process_layout.addLayout(lower_layout)
         # process seg layout 
         seg_layout = QVBoxLayout()
-        self.sam_prompt = Qpaint_canvas(size=(500, 500))
-        self.sam_widget = Qpaint_canvas(size=(500, 500))
+        self.sam_prompt = Position_canvas(size=(500, 500))
+        # self.sam_widget = Qpaint_canvas(size=(500, 500))
+        self.sam_widget = Image_canvas(size=(500, 500))
         # self.sam_widget.update_canvas(background=self.items['test_image'])
         seg_bt_layout = QHBoxLayout()
         seg_run_bt = QPushButton("rerun segmentation")
@@ -297,7 +330,7 @@ class MainWindow(QWidget):
         seg_save_bt.clicked.connect(self.on_save_seg)
         # add text input         
         seg_bt_layout.addWidget(seg_run_bt)
-        seg_bt_layout.addWidget(seg_save_bt)
+        # seg_bt_layout.addWidget(seg_save_bt)
         seg_layout.addWidget(self.sam_prompt, 45)
         seg_layout.addWidget(self.sam_widget, 45)
         seg_layout.addLayout(seg_bt_layout, 10)
@@ -308,7 +341,7 @@ class MainWindow(QWidget):
         self.inpaint_output_widget = Image_canvas(size=(500, 500))
         inpaint_bt_layout = QHBoxLayout()
         inpaint_run_bt = QPushButton("rerun inpainting")
-        inpaint_save_bt = QPushButton("Save")
+        inpaint_save_bt = QPushButton("Save inpaint")
         inpaint_save_bt.clicked.connect(self.on_save_inpaint)
         inpaint_run_bt.clicked.connect(self.on_run_inpaint)
         # inpaint_text_layout = QHBoxLayout()
@@ -369,6 +402,7 @@ class MainWindow(QWidget):
         move_control_layout.addWidget(rotate_down_bt, 3, 1)
         
         save_3d_bt = QPushButton("Save")
+        save_3d_bt.clicked.connect(self.on_save_3d)
         move_control_layout.addWidget(save_3d_bt, 4, 0)
         move_control_layout.setVerticalSpacing(10)
         move_control_layout.setHorizontalSpacing(10)
@@ -382,11 +416,14 @@ class MainWindow(QWidget):
         return layout
         
     def on_run_all(self):
+        self.items_combo.clear()
         self.on_run_det()
         for name, item in self.items['items'].items():
             self.on_run_seg(name)
-            self.on_run_inpaint(name)
+            # self.on_run_inpaint(name)
             self.on_run_recon(name)
+        self.set_plotter_items(self.items['items'])
+        self.update_layout()
         return
     
     def on_run_det(self):
@@ -399,7 +436,11 @@ class MainWindow(QWidget):
         else:
             current_text = self.items_combo.currentText()
         item = self.items['items'][current_text]
-        self.robot.run_seg(current_text, item)
+        points = self.sam_prompt.get_positions()
+        if len(points):
+            self.robot.run_seg(current_text, item, True, self.sam_prompt.get_positions())
+        else:
+            self.robot.run_seg(current_text, item)
         self.update_layout()
         
     def on_save_seg(self, name=None):
@@ -413,7 +454,7 @@ class MainWindow(QWidget):
                 return 
             if 'diffuse_mask' not in item.keys():
                 return 
-            self.sam_widget.save(item)
+            # self.sam_widget.save(item)
             self.update_layout()
     
     def on_run_inpaint(self, name=None):
@@ -423,21 +464,27 @@ class MainWindow(QWidget):
             current_text = self.items_combo.currentText()
         item = self.items['items'][current_text]
         prompt = self.inpaint_prompt_text.text()
+        if prompt == '':
+            prompt = current_text.split(' ')[0]
         self.robot.run_inpaint(current_text, prompt)
         self.on_run_recon(current_text)
         self.update_layout()
         
-    def on_save_inpaint(self, name=None):
+    def on_clear_inpaint(self, name=None):
+        self.inpaint_widget.clear()
+        
+    def on_save_inpaint(self, name= None):
         if name:
             current_text = name
         else:
             current_text = self.items_combo.currentText()
         item = self.items['items'][current_text]
-        if 'diffuse_mask' not in item.keys():
-            return 
         self.inpaint_widget.save(item)
         self.inpaint_widget.clear()
         self.update_layout()
+        
+        
+        
         
     def on_run_recon(self, name):
         if name:
@@ -447,7 +494,8 @@ class MainWindow(QWidget):
         self.robot.run_recon(current_text)
         self.update_layout()
         
-        
+    def on_save_3d(self):
+        self.plotter.export_obj('./scene.obj')
 
     
     def on_rot_up(self):
@@ -507,11 +555,16 @@ class MainWindow(QWidget):
         self.plotter.add_axes(
                 color='black',
                 labels_off=False)
+        # light = pv.Light(position=(0, 3, 0), focal_point=(0, 0, 0), color='white', cone_angle=90,
+        #                  exponent=10, intensity=3)
+        # light.show_actor()
+        # self.plotter.add_light(light)
         self.plotter.set_background('white')
-        self.plotter.view_vector([1, -1, 1], [0, -1, 0])
+        self.plotter.set_viewup([0, 1, 0])
         return
 
     def set_plotter_items(self, items):
+        self.plotter.clear()
         max_size = 0
         camera_pose = np.eye(4)
         mesh_center = np.zeros([0, 0, 0])
@@ -532,12 +585,12 @@ class MainWindow(QWidget):
                 mesh_obj = item['mesh_obj']       
                 mesh_obj.camera_pose = np.linalg.inv(camera_pose)
                 mesh_obj.camera_pose[:3, -1:] = np.array([mesh_center]).transpose(1, 0)
-                # mesh_obj.camera_pose[:3, 3]
-                # mesh_obj.init_translation -= mesh_center
-                # mesh_obj.update_mesh()
+                mesh_obj.update_mesh()
+        self.plotter.add_floor(face='-y', i_resolution=10, j_resolution=10, pad=0.2)
 
     # add sam process to fix sam result 
     def onComboChanged(self):
+        self.sam_prompt.clear()
         self.update_layout()
 
     def imagelist_select(self, item):
@@ -545,13 +598,21 @@ class MainWindow(QWidget):
         
     def upload_upload(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Upload Image", "", 
-                                            "Image Files (*.png *.jpg *.bmp)")
+                                            "Image Files (*.png *.jpg *.bmp *.jpeg)")
         if file_path:
+            self.robot.items = {}
+            self.items = self.robot.items
+            
             self.init_layout()
             self.canvas.update_bg(file_path)
             self.items['test_image'] = file_path
             self.robot.set(image_path = file_path)
-            self.items = self.robot.items
+            
+            # # init with data
+            # self.items = items
+            # self.robot.items = items
+            # self.set_plotter_items(self.items['items'])
+            # self.update_layout()
 
 
         

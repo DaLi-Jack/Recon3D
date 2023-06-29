@@ -29,7 +29,7 @@ def read_args():
     # for omni3d
     parser.add_argument("--config-file", default="cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", metavar="FILE", help="path to config file")
     # parser.add_argument('--input-folder',  type=str, help='list of image folders to process', required=True)
-    parser.add_argument("--threshold", type=float, default=0.25, help="threshold on score for visualizing")
+    parser.add_argument("--threshold", type=float, default=0.5, help="threshold on score for visualizing")
     parser.add_argument("--display", default=False, action="store_true", help="Whether to show the images in matplotlib",)
     parser.add_argument("--inpaint", default=True, action="store_true", help="Whether to inpaint the image")
     
@@ -157,27 +157,30 @@ class Robot:
                 for k, v in obj_dic.items():
                     item[k] = v
                 bbox3D = np.array(item['bbox3D'])
-                gt_length = np.array([bbox3D[5], bbox3D[4], bbox3D[3]]) 
-                size = self.gt_length[0] * self.gt_length[1] * self.gt_length[2]
-                item['size'] = size 
-                if size > max_size:
-                    max_size = size 
-                    camera_pose = np.linalg.inv(np.array(item['pose']))
+                # gt_length = np.array([bbox3D[5], bbox3D[4], bbox3D[3]]) 
+                # size = self.gt_length[0] * self.gt_length[1] * self.gt_length[2]
+                # item['size'] = size 
+                # if size > max_size:
+                #     max_size = size 
+                    # camera_pose = np.linalg.inv(np.array(item['pose']))
                 item['name'] = det_text
                 items[det_text] = item
-                
         self.items['items'] = items
         print("run detection!")
     
-    def run_seg(self, det_text, obj_dic):
+    def run_seg(self, det_text, obj_dic, update=False, points=[]):
         self.save_sam_path = os.path.join(self.save_root_path, 'sam')
         os.makedirs(self.save_sam_path, exist_ok=True)
         input_box = np.array(obj_dic['bbox2D'])
-        self.seg.run(input_box, det_text, self.save_sam_path, use_inpainting=True)
+        if update:
+            self.seg.update(points, input_box, det_text, self.save_sam_path, use_inpainting=True)
+        else:
+            self.seg.run(input_box, det_text, self.save_sam_path, use_inpainting=True)
         self.items['items'][det_text]['sam_res'] = os.path.join(self.save_root_path, 'sam', det_text + '_sam.png')
         self.items['items'][det_text]['mask'] = os.path.join(self.save_root_path, 'sam', det_text + '_mask.png')
         self.items['items'][det_text]['diffuse_mask'] = os.path.join(self.save_root_path, 'sam', det_text + '_diffuse_mask.png')
         self.items['items'][det_text]['sam_vis'] = os.path.join(self.save_root_path, 'sam', det_text + '_vis.png')
+        self.items['items'][det_text]['inpaint_res'] =  os.path.join(self.save_root_path, 'sam', det_text + '_vis.png')
         print("run sam!")
         return True
 
@@ -215,7 +218,7 @@ class Robot:
         fusion_scene(self.items['items'], self.save_root_path, self.save_shape_path)
 if __name__ == "__main__":
     robot = Robot()
-    robot.set(image_path='./test_img/real_img/0005.png') 
+    robot.set(image_path='./test_img/real_img/0004.png') 
     robot.run_det()
     flag, detection_results = robot.get_detection_result()
     for det_text, obj_dic in detection_results.items():
